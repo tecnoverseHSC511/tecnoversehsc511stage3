@@ -1,0 +1,32 @@
+import streamlit as st
+import requests
+
+# Konfigurasi Ubid-ots
+UBIDOTS_TOKEN = "BBUS-AIa2fWNuT5TqvuskAK7ZjqLXhK5I13"  # Ganti token kamu
+DEVICE_LABEL = "esp32-dht-hscr04"             # Ganti sesuai label device
+BASE_URL = f"https://stem.ubidots.com/api/v1.6/devices/esp32-dht-hscr04/"
+
+headers = {
+    "X-Auth-Token": UBIDOTS_TOKEN
+}
+
+def get_variable(variable):
+    url = f"{BASE_URL}{variable}/lv"
+    response = requests.get(url, headers=headers)
+    if response.status_code == 200:
+        return response.text
+    else:
+        return None
+
+# UI Streamlit
+st.title("Monitoring Sensor ESP32")
+
+jarak = get_variable("jarak")
+suhu = get_variable("suhu")
+kelembapan = get_variable("kelembapan")
+
+col1, col2, col3 = st.columns(3)
+
+col1.metric("Jarak (cm)", jarak if jarak else "N/A")
+col2.metric("Suhu (°C)", suhu if suhu else "N/A")
+col3.metric("Kelembapan (%)", kelembapan if kelembapan else "N/A")
