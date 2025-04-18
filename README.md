@@ -1,1 +1,0 @@
-# tecnoversehsc511stage3
