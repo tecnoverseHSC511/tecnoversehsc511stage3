@@ -1,0 +1,117 @@
+# tecnoversehsc511stage3 
+import network
+import time
+import urequests
+from machine import Pin
+from dht import DHT11
+
+# === Konfigurasi WiFi ===
+SSID = "Afganya"
+PASSWORD = "afganhsc511"
+
+def connect_wifi():
+    wlan = network.WLAN(network.STA_IF)
+    wlan.active(True)
+    wlan.connect(SSID, PASSWORD)
+
+    print("Menghubungkan ke WiFi...", end="")
+    while not wlan.isconnected():
+        print(".", end="")
+        time.sleep(1)
+    print("\nTerhubung ke WiFi")
+    print("IP Address:", wlan.ifconfig()[0])
+
+# === Inisialisasi sensor & LED ===
+dht = DHT11(Pin(13))  # DHT11 OUT ke pin 13
+
+trigger = Pin(2, Pin.OUT)
+echo = Pin(5, Pin.IN)
+
+led_kuning = Pin(22, Pin.OUT)
+led_merah = Pin(23, Pin.OUT)
+led_hijau = Pin(18, Pin.OUT)
+
+# === Fungsi ukur jarak manual ===
+
+def ukur_jarak():
+    trigger.off()
+    time.sleep_us(2)
+    trigger.on()
+    time.sleep_us(10)
+    trigger.off()
+
+    timeout = 30000  # ditambah dari 10ms ke 30ms
+
+    start_time = time.ticks_us()
+    while echo.value() == 0:
+        if time.ticks_diff(time.ticks_us(), start_time) > timeout:
+            print("Timeout: tidak ada sinyal naik")
+            return -1
+
+    start = time.ticks_us()
+    while echo.value() == 1:
+        if time.ticks_diff(time.ticks_us(), start) > timeout:
+            print("Timeout: sinyal tidak turun")
+            return -1
+
+    end = time.ticks_us()
+    durasi = time.ticks_diff(end, start)
+    jarak = (durasi * 0.0343) / 2
+    return jarak
+
+# === Konfigurasi Ubidots ===
+UBIDOTS_TOKEN = "BBUS-AIa2fWNuT5TqvuskAK7ZjqLXhK5I13"
+DEVICE_LABEL = "esp32_dht_hcsr04"
+UBIDOTS_URL = f"https://stem.ubidots.com/api/v1.6/devices/esp32-dht-hscr04/"
+
+headers = {
+    "X-Auth-Token": UBIDOTS_TOKEN,
+    "Content-Type": "application/json"
+}
+
+def kirim_ke_ubidots(jarak, suhu, kelembapan):
+    data = {
+        "jarak": jarak,
+        "suhu": suhu,
+        "kelembapan": kelembapan
+    }
+    try:
+        response = urequests.post(UBIDOTS_URL, json=data, headers=headers)
+        print("Data dikirim:", response.text)
+        response.close()
+    except Exception as e:
+        print("Gagal kirim data:", e)
+
+# === Main Program ===
+connect_wifi()
+
+while True:
+    try:
+        dht.measure()
+        suhu = dht.temperature()
+        kelembapan = dht.humidity()
+        jarak = ukur_jarak()
+
+        print("Jarak:", round(jarak, 2), "cm | Suhu:", suhu, "°C | Kelembapan:", kelembapan, "%")
+
+        # Logika LED indikator
+        if jarak < 10:
+            led_merah.on()
+            led_kuning.off()
+            led_hijau.off()
+        elif jarak < 20:
+            led_merah.off()
+            led_kuning.on()
+            led_hijau.off()
+        else:
+            led_merah.off()
+            led_kuning.off()
+            led_hijau.on()
+
+        # Kirim data
+        kirim_ke_ubidots(jarak, suhu, kelembapan)
+        time.sleep(10)
+
+    except Exception as e:
+        print("Error:", e)
+        time.sleep(5)
